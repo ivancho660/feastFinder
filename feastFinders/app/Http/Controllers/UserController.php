@@ -14,8 +14,14 @@ class UserController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
+<<<<<<< HEAD
             'password' => 'required|string|min:8',
             'rol' => 'required|string|max:255', 
+=======
+            'rol' => 'required|string|min:255',
+            'password' => 'required|string|min:8',
+
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
         ]);
 
         if ($validator->fails()) {
@@ -48,16 +54,65 @@ class UserController extends Controller
         }
 
     }
+<<<<<<< HEAD
    
 
     
 
+=======
+   public function login(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|string|email',
+            'password' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $credentials = $request->only('email', 'password');
+
+        if (!$token = JWTAuth::attempt($credentials)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Credenciales incorrectas',
+            ], 401);
+        }
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+        ]);
+    }
+
+    public function cerrar(Request $request)
+    {
+        JWTAuth::invalidate(JWTAuth::getToken());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Sesión cerrada con éxito',
+        ]);
+    }
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function traerDatos(Request $request)
     {
         return response()->json([
             'success' => true,
             'user' => $request->user(),
         ]);
+<<<<<<< HEAD
     }
 
+=======
+        
+        
+    }
+
+
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
 }

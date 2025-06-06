@@ -17,7 +17,11 @@ class productosController extends Controller
     
     }
 
+<<<<<<< HEAD
    
+=======
+
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -38,10 +42,17 @@ class productosController extends Controller
         return response()->json($productos, 201);
     }
 
+<<<<<<< HEAD
   
     public function show(string $id)
     {
          $productos = productos::find($id);
+=======
+
+    public function show(string $id)
+    {
+        $productos = productos::find($id);
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
         if (!$productos) {
             return response()->json(['message' => 'Producto no encontrado'], 404);
         }
@@ -64,7 +75,11 @@ class productosController extends Controller
             'nombre' => 'string|max:255',
             'nombreR' => 'string|max:255',
             'precio' => 'double|min:0'
+<<<<<<< HEAD
            
+=======
+        
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
         ]);
         if ($validator->fails()){
             return response()->json($validator->errors(),422);
@@ -75,7 +90,11 @@ class productosController extends Controller
 
     }
 
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function destroy(string $id)
     {
         $productos = productos::find($id);
@@ -85,4 +104,8 @@ class productosController extends Controller
         $productos->delete();
         return response()->json(['messge' => 'Producto eliminado con éxito']); 
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a

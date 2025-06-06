@@ -8,6 +8,10 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
 class User extends Authenticatable implements JWTSubject
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -44,6 +48,7 @@ class User extends Authenticatable implements JWTSubject
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+<<<<<<< HEAD
             'rol' => 'string',
         ];
     }
@@ -59,3 +64,17 @@ class User extends Authenticatable implements JWTSubject
 
 
 }
+=======
+        ];
+    }
+    //meetodo requeridos por jwt
+//devuelve el campo unico que identifica al usuario
+    public function getJWTIdentifier() {
+    return $this->getKey();//usualmente el ID del usuario
+}
+//PERMITE AGREGAR INFORMACION EXTRA al playload del token (como roles ,permisos, etc)
+    public function getJWTCustomClaims() {
+    return [];//Datos adicionales que se pueden agregar al token(ejemplo roles, permisos, etc)
+}
+}
+>>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
