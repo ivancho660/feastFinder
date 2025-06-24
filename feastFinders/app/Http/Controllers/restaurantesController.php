@@ -77,12 +77,6 @@ class restaurantesController extends Controller
             return response()->json(['message'=> 'resaturante no encontrado'],404);
         }
         $restaurantes->delete();
-<<<<<<< HEAD
         return response()->json(['mensage' => 'resaturante eliminado con exito']);
     }
 }
-=======
-        return response()->json(['mensage' => 'resaturante eliminada con exito']);
-    }
-}
->>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a

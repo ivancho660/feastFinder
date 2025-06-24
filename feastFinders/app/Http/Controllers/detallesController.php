@@ -36,12 +36,6 @@ class detallesController extends Controller
         return response()->json($detalles, 201);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Display the specified resource.
-     */
->>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function show(string $id)
     {
         $detalles = detalles::find($id);
@@ -51,12 +45,6 @@ class detallesController extends Controller
         return response()->json($detalles);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Update the specified resource in storage.
-     */
->>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function update(Request $request, string $id)
     {
         $detalles = detalles::find($id);
@@ -78,12 +66,6 @@ class detallesController extends Controller
         return response()->json($detalles);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Remove the specified resource from storage.
-     */
->>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
     public function destroy(string $id)
     {
         $detalles = detalles::find($id);
@@ -91,12 +73,6 @@ class detallesController extends Controller
             return response()->json(['message'=> 'detalle no encontrado'],404);
         }
         $detalles->delete();
-<<<<<<< HEAD
         return response()->json(['mensage' => 'detalle eliminado con exito']);
     }
 }
-=======
-        return response()->json(['mensage' => 'detalle eliminada con exito']);
-    }
-}
->>>>>>> a7e2ba0908f1588fd2c377bd9e8592ad3375dc8a
