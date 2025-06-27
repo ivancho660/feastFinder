@@ -4,22 +4,17 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 
-class homeUserController extends Controller
+class carritoController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        //
+        $carrito = carrito::all();
+        return response()->json($carrito);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        //
+    
     }
 
     /**
@@ -43,6 +38,6 @@ class homeUserController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        
     }
 }

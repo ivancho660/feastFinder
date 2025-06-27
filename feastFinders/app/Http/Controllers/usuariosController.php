@@ -2,15 +2,26 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\usuarios;
+use App\Models\usuarios; // Asegúrate de que este es el nombre correcto de tu modelo de usuario
+use App\Services\EmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
-use Tymon\JWTAuth\Facades\JWTAuth; // Facade correcto
+use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
+use Illuminate\Support\Str;
+use Carbon\Carbon; // Importa la clase Carbon para trabajar con fechas y horas
 
 class usuariosController extends Controller
 {
+    protected $emailService;
+    protected $appUrl; // Propiedad para almacenar la URL de la aplicación
+
+    public function __construct(EmailService $emailService)
+    {
+        $this->emailService = $emailService;
+        $this->appUrl = config('app.url'); // Obtiene la URL base de la aplicación desde el archivo .env
+    }
 
     /**
      * Obtener todos los usuarios (protegido por JWT)
@@ -54,14 +65,13 @@ class usuariosController extends Controller
             'estado' => $request->estado,
             'imagen' => $imagen,
             'nombre' => $request->nombre,
-            'password' => bcrypt($request->password),
+            'password' => bcrypt($request->password), // Usa bcrypt para hashear la contraseña
             'telefono' => $request->telefono,
-            'tipo' => $request->tipo ?? 'USER',
+            'tipo' => $request->tipo ?? 'USER', // Establece 'USER' como valor predeterminado si no se proporciona
             'username' => $request->username
         ]);
 
-        // Autenticar al usuario recién creado y generar token
-        $token = auth()->login($usuario);
+        $token = auth()->login($usuario); // Inicia sesión el usuario recién creado y genera un token JWT
 
         return response()->json([
             'success' => true,
@@ -69,7 +79,7 @@ class usuariosController extends Controller
             'data' => $usuario,
             'token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => auth()->factory()->getTTL() * 60
+            'expires_in' => auth()->factory()->getTTL() * 60 // Duración del token en segundos
         ], 201);
     }
 
@@ -93,6 +103,7 @@ class usuariosController extends Controller
         $credentials = $request->only('email', 'password');
 
         try {
+            // Intenta autenticar al usuario con las credenciales proporcionadas
             if (!$token = JWTAuth::attempt($credentials)) {
                 return response()->json([
                     'success' => false,
@@ -100,22 +111,23 @@ class usuariosController extends Controller
                 ], 401);
             }
         } catch (JWTException $e) {
+            // Captura cualquier excepción relacionada con JWT
             return response()->json([
                 'success' => false,
                 'message' => 'No se pudo crear el token',
             ], 500);
         }
 
-        $user = Auth::user();
+        $user = Auth::user(); // Obtiene el usuario autenticado
 
         return response()->json([
             'success' => true,
             'token' => $token,
             'token_type' => 'bearer',
             'expires_in' => auth()->factory()->getTTL() * 60,
-            'user' => [
+            'user' => [ // Retorna información básica del usuario
                 'id' => $user->id,
-                'name' => $user->nombre, 
+                'name' => $user->nombre,
                 'email' => $user->email,
                 'tipo' => $user->tipo,
                 'imagen' => $user->imagen
@@ -126,12 +138,11 @@ class usuariosController extends Controller
     /**
      * Cerrar sesión e invalidar token JWT
      */
-public function cerrarSesion(Request $request)
+    public function cerrarSesion(Request $request)
     {
         try {
-            // Obtener el token actual del request
-            $token = JWTAuth::getToken();
-            
+            $token = JWTAuth::getToken(); // Obtiene el token JWT actual
+
             if (!$token) {
                 return response()->json([
                     'success' => false,
@@ -139,16 +150,12 @@ public function cerrarSesion(Request $request)
                 ], 401);
             }
 
-            // Invalidar el token
-            JWTAuth::invalidate($token);
-            
-            // Limpiar la autenticación
-            Auth::logout();
-            
+            JWTAuth::invalidate($token); // Invalida el token
+            Auth::logout(); // Cierra la sesión de Laravel
+
             return response()->json([
                 'success' => true,
-                'message' => 'Sesión cerrada exitosamente',
-                'redirect' => url('/')
+                'message' => 'Sesión cerrada exitosamente'
             ]);
 
         } catch (JWTException $e) {
@@ -166,13 +173,13 @@ public function cerrarSesion(Request $request)
     public function perfil()
     {
         try {
-            $user = JWTAuth::parseToken()->authenticate();
-            
+            $user = JWTAuth::parseToken()->authenticate(); // Autentica al usuario usando el token de la solicitud
+
             return response()->json([
                 'success' => true,
                 'user' => $user
             ]);
-            
+
         } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
@@ -187,20 +194,159 @@ public function cerrarSesion(Request $request)
     public function refreshToken()
     {
         try {
-            $newToken = JWTAuth::parseToken()->refresh();
-            
+            $newToken = JWTAuth::parseToken()->refresh(); // Refresca el token JWT
+
             return response()->json([
                 'success' => true,
                 'token' => $newToken,
                 'token_type' => 'bearer',
                 'expires_in' => auth()->factory()->getTTL() * 60
             ]);
-            
+
         } catch (JWTException $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'No se pudo refrescar el token'
             ], 401);
         }
+    }
+
+    /**
+     * Solicitar recuperación de contraseña (para móvil)
+     * Genera un código, lo guarda en la DB y lo envía por correo.
+     */
+    public function solicitarRecuperacion(Request $request)
+    {
+        // Valida que el email sea requerido, tenga formato de email y exista en la tabla 'usuarios'
+        $request->validate([
+            'email' => 'required|email|exists:usuarios,email',
+        ]);
+
+        $emailDestino = $request->input('email');
+
+        // Busca el usuario por su email
+        $usuario = usuarios::where('email', $emailDestino)->first();
+
+        // Si el usuario no se encuentra (aunque la validación 'exists' ya lo cubre), retorna un error.
+        if (!$usuario) {
+            return response()->json(['message' => 'El correo electrónico no está registrado.'], 404);
+        }
+
+        // 1. Genera un código de restablecimiento aleatorio (ej. 6 caracteres alfanuméricos)
+        $codigoRestablecimiento = Str::random(6);
+        // 2. Define las horas de expiración del código
+        $horasExpiracion = 2;
+
+        $usuario->resetToken = $codigoRestablecimiento;
+
+        $usuario->tokenExpiracion = Carbon::now()->addHours($horasExpiracion);
+        $usuario->save(); 
+
+        // 4. Llama al servicio de correo para enviar el email con el código
+        try {
+            $this->emailService->enviarCorreo(
+                $emailDestino,
+                'Código de Recuperación de Contraseña',
+                $codigoRestablecimiento,
+                $horasExpiracion
+            );
+
+            return response()->json(['message' => 'Correo de recuperación enviado con éxito.'], 200);
+
+        } catch (\Exception $e) {
+            \Log::error('Error al enviar correo de recuperación para ' . $emailDestino . ': ' . $e->getMessage(), ['exception' => $e]);
+            return response()->json(['message' => 'Error al enviar el correo de recuperación. Intenta de nuevo más tarde.'], 500);
+        }
+    }
+
+    /**
+     * Validar código de recuperación (para móvil)
+     * Verifica si el código proporcionado es válido y no ha expirado.
+     */
+    public function validarCodigoRecuperacion(Request $request)
+    {
+        // Valida los campos requeridos
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:usuarios,email',
+            'codigo' => 'required|string|size:6' // Asegúrate de que 'size' coincida con la longitud de tu token
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Busca el usuario por email, y verifica que el token coincida y no haya expirado
+        $usuario = usuarios::where('email', $request->email)
+                            ->where('resetToken', $request->codigo)
+                            ->where('tokenExpiracion', '>', Carbon::now()) // Compara con la hora actual
+                            ->first();
+
+        if (!$usuario) {
+            // Si el usuario no se encuentra con ese token o el token ha expirado
+            return response()->json([
+                'success' => false,
+                'message' => 'Código inválido o expirado'
+            ], 400);
+        }
+
+        // Si el código es válido, genera un token temporal más largo
+        // Este token temporal se usará para autorizar el cambio de contraseña.
+        // Se sobrescribe el token actual de restablecimiento con este nuevo token temporal.
+        $tokenTemporal = Str::random(60); // Un token más largo para la siguiente etapa
+        $usuario->resetToken = $tokenTemporal; // Reutilizamos el campo resetToken para este token temporal
+        $usuario->save(); // Guarda el nuevo token temporal
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Código validado correctamente',
+            'token_temporal' => $tokenTemporal // Envía el token temporal al cliente
+        ]);
+    }
+
+    /**
+     * Restablecer contraseña (para móvil)
+     * Permite al usuario establecer una nueva contraseña usando el token temporal.
+     */
+    public function restablecerPassword(Request $request)
+    {
+        // Valida los campos requeridos, incluyendo la confirmación de la contraseña
+        $validator = Validator::make($request->all(), [
+            'token_temporal' => 'required|exists:usuarios,resetToken', // Verifica que el token temporal exista
+            'password' => 'required|string|min:8|confirmed'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        // Busca el usuario por el token temporal
+        $usuario = usuarios::where('resetToken', $request->token_temporal)->first();
+
+        // Si el usuario no se encuentra (lo cual debería ser raro si exists en la validación funciona)
+        if (!$usuario) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Token de restablecimiento inválido o no encontrado.'
+            ], 400);
+        }
+
+        // Actualiza la contraseña del usuario
+        $usuario->password = bcrypt($request->password); // Hashea la nueva contraseña
+
+        // Limpia los campos del token después de usarlo para evitar reusos
+        $usuario->resetToken = null;
+        $usuario->tokenExpiracion = null;
+        $usuario->save(); // Guarda la nueva contraseña y limpia los tokens
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contraseña restablecida exitosamente'
+        ]);
     }
 }
