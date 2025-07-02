@@ -56,7 +56,6 @@
             <p>Has solicitado restablecer tu contraseña. Utiliza el siguiente código para completar el proceso:</p>
 
             <div class="code-box">
-                {{-- Aquí es donde se inyectará el código dinámicamente --}}
                 {{ $codigo }}
             </div>
 

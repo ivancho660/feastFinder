@@ -11,8 +11,10 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Str;
 use Carbon\Carbon; // Importa la clase Carbon para trabajar con fechas y horas
+use App\Models\productos;
+use Illuminate\Support\Facades\Log;
 
-class usuariosController extends Controller
+class usuariosController extends Controller // <<-- Asegúrate de que el nombre del archivo es UsuariosController.php (con 'U' mayúscula)
 {
     protected $emailService;
     protected $appUrl; // Propiedad para almacenar la URL de la aplicación
@@ -23,9 +25,6 @@ class usuariosController extends Controller
         $this->appUrl = config('app.url'); // Obtiene la URL base de la aplicación desde el archivo .env
     }
 
-    /**
-     * Obtener todos los usuarios (protegido por JWT)
-     */
     public function index()
     {
         $usuarios = usuarios::all();
@@ -240,7 +239,7 @@ class usuariosController extends Controller
         $usuario->resetToken = $codigoRestablecimiento;
 
         $usuario->tokenExpiracion = Carbon::now()->addHours($horasExpiracion);
-        $usuario->save(); 
+        $usuario->save();
 
         // 4. Llama al servicio de correo para enviar el email con el código
         try {
@@ -254,6 +253,7 @@ class usuariosController extends Controller
             return response()->json(['message' => 'Correo de recuperación enviado con éxito.'], 200);
 
         } catch (\Exception $e) {
+            // Aquí usas \Log::error, lo cual es correcto.
             \Log::error('Error al enviar correo de recuperación para ' . $emailDestino . ': ' . $e->getMessage(), ['exception' => $e]);
             return response()->json(['message' => 'Error al enviar el correo de recuperación. Intenta de nuevo más tarde.'], 500);
         }
@@ -307,7 +307,6 @@ class usuariosController extends Controller
     }
 
     /**
-     * Restablecer contraseña (para móvil)
      * Permite al usuario establecer una nueva contraseña usando el token temporal.
      */
     public function restablecerPassword(Request $request)
@@ -327,8 +326,7 @@ class usuariosController extends Controller
 
         // Busca el usuario por el token temporal
         $usuario = usuarios::where('resetToken', $request->token_temporal)->first();
-
-        // Si el usuario no se encuentra (lo cual debería ser raro si exists en la validación funciona)
+        // Si no se encuentra el usuario, retorna un error
         if (!$usuario) {
             return response()->json([
                 'success' => false,
@@ -342,11 +340,43 @@ class usuariosController extends Controller
         // Limpia los campos del token después de usarlo para evitar reusos
         $usuario->resetToken = null;
         $usuario->tokenExpiracion = null;
-        $usuario->save(); // Guarda la nueva contraseña y limpia los tokens
+        $usuario->save(); 
 
         return response()->json([
             'success' => true,
             'message' => 'Contraseña restablecida exitosamente'
         ]);
     }
+
+    public function traerMenu($nr)
+    {
+        Log::info("Buscando productos para el restaurante: {$nr}"); 
+
+        if (empty($nr)) {
+            Log::warning("El nombre del restaurante proporcionado es inválido.");
+            return response()->json([
+                'message' => 'El nombre del restaurante no puede estar vacío.',
+                'productos' => []
+            ], 400);
+        }
+
+        $productosDisponibles = productos::where('nombreR', $nr) 
+                                        ->where('cantidad', '>', 0)
+                                        ->get();
+
+        if ($productosDisponibles->isEmpty()) {
+            Log::warning("No se encontraron productos disponibles para el restaurante: {$nr}");
+            return response()->json([
+                'message' => 'No se encontraron productos disponibles para este restaurante.',
+                'productos' => []
+            ], 404); 
+        } else {
+            Log::info("Se encontraron {$productosDisponibles->count()} productos disponibles para el restaurante: {$nr}");
+        }
+        return response()->json([
+            'message' => 'Productos obtenidos exitosamente.',
+            'productos' => $productosDisponibles
+        ]);
+    }
+
 }

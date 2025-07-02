@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Route;
 // Rutas públicas (sin autenticación)
 Route::post('crearUsuarios', [usuariosController::class, 'store']);
 Route::post('login', [usuariosController::class, 'login']);
+Route::get('/menu/{nr}', [usuariosController::class, 'traerMenu']);
+
 
 // Rutas de recuperación de contraseña
 Route::post('recuperacion/solicitar', [usuariosController::class, 'solicitarRecuperacion']);
