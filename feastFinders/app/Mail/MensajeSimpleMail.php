@@ -21,7 +21,6 @@ class MensajeSimpleMail extends Mailable
 
     /**
      * Un arreglo asociativo que contiene los datos que se pasarán a la vista Blade.
-     * Por ejemplo: ['codigo' => 'ABC123', 'expiracion' => 2].
      * @var array
      */
     public $datos;

@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    'stripe' => [
+        'key' => env('STRIPE_KEY'),
+        'secret' => env('STRIPE_SECRET'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+        'success_url' => env('STRIPE_SUCCESS_URL'),
+        'cancel_url' => env('STRIPE_CANCEL_URL'),
+    ],
+
+    'twilio' => [
+        'sid' => env('TWILIO_SID'),
+        'token' => env('TWILIO_TOKEN'),
+        'number' => env('TWILIO_NUMBER'),
+    ],
+
 ];
