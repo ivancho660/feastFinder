@@ -61,7 +61,7 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
         $usuario = usuarios::create([
             'direccion' => $request->direccion,
             'email' => $request->email,
-            'estado' => $request->estado,
+            'estado' => $request->estado ?? 'activo', // Establece 'activo' como valor predeterminado si no se proporciona
             'imagen' => $imagen,
             'nombre' => $request->nombre,
             'password' => bcrypt($request->password), // Usa bcrypt para hashear la contraseña
