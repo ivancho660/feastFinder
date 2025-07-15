@@ -70,6 +70,8 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
             'username' => $request->username
         ]);
 
+        
+
         $token = auth()->login($usuario); // Inicia sesión el usuario recién creado y genera un token JWT
 
         return response()->json([
