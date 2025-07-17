@@ -119,7 +119,7 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
             ], 500);
         }
 
-        $user = Auth::user(); // Obtiene el usuario autenticado
+        $usuario = Auth::usuario(); // Obtiene el usuario autenticado
 
         return response()->json([
             'success' => true,

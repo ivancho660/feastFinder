@@ -19,7 +19,7 @@ Route::post('recuperacion/restablecer', [usuariosController::class, 'restablecer
 
 // Rutas protegidas por JWT
 Route::middleware('jwt.auth')->group(function () {
-    Route::get('traerDatos', [UserController::class, 'traerDatos']);
+    Route::get('traerDatos', [UsuariosController::class, 'perfil']);
     Route::get('cerrarSesion', [usuariosController::class, 'cerrarSesion']);
     Route::get('listarUsuarios', [usuariosController::class, 'index']);
     Route::get('listarRestaurantes', [restaurantesController::class, 'index']);
