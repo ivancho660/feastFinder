@@ -87,54 +87,55 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
     /**
      * Iniciar sesión y devolver token JWT
      */
-    public function login(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|string|email|max:255',
-            'password' => 'required|string|min:8',
-        ]);
+  public function login(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|string|email|max:255',
+        'password' => 'required|string|min:8',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        $credentials = $request->only('email', 'password');
-
-        try {
-            // Intenta autenticar al usuario con las credenciales proporcionadas
-            if (!$token = JWTAuth::attempt($credentials)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Credenciales incorrectas',
-                ], 401);
-            }
-        } catch (JWTException $e) {
-            // Captura cualquier excepción relacionada con JWT
-            return response()->json([
-                'success' => false,
-                'message' => 'No se pudo crear el token',
-            ], 500);
-        }
-
-        $usuario = Auth::usuario(); // Obtiene el usuario autenticado
-
+    if ($validator->fails()) {
         return response()->json([
-            'success' => true,
-            'token' => $token,
-            'token_type' => 'bearer',
-            'expires_in' => auth()->factory()->getTTL() * 60,
-            'user' => [ // Retorna información básica del usuario
-                'id' => $user->id,
-                'name' => $user->nombre,
-                'email' => $user->email,
-                'tipo' => $user->tipo,
-                'imagen' => $user->imagen
-            ]
-        ]);
+            'success' => false,
+            'errors' => $validator->errors(),
+        ], 422);
     }
+
+    $credentials = $request->only('email', 'password');
+
+    try {
+        // Intenta autenticar al usuario con las credenciales proporcionadas
+        if (!$token = JWTAuth::attempt($credentials)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Credenciales incorrectas',
+            ], 401);
+        }
+    } catch (JWTException $e) {
+        // Captura cualquier excepción relacionada con JWT
+        return response()->json([
+            'success' => false,
+            'message' => 'No se pudo crear el token',
+        ], 500);
+    }
+
+    $user = Auth::user(); // ✅ Aquí usas el método correcto
+
+    return response()->json([
+        'success' => true,
+        'token' => $token,
+        'token_type' => 'bearer',
+        'expires_in' => auth()->factory()->getTTL() * 60,
+        'user' => [
+            'id' => $user->id,
+            'name' => $user->nombre,
+            'email' => $user->email,
+            'tipo' => $user->tipo,
+            'imagen' => $user->imagen
+        ]
+    ]);
+}
+
 
     /**
      * Cerrar sesión e invalidar token JWT
