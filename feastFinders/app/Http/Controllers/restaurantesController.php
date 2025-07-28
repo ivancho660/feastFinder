@@ -11,11 +11,16 @@ class restaurantesController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
-    {
-        $restaurantes = restaurantes::all();
-        return response()->json($restaurantes);
-    }
+public function index()
+{
+    $restaurantes = restaurantes::all()->map(function ($restaurante) {
+        $restaurante->imagen = url('images/' . $restaurante->imagen);
+        return $restaurante;
+    });
+
+    return response()->json($restaurantes);
+}
+
 
 
     public function store(Request $request)
