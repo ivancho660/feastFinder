@@ -2,17 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Orden, DetalleOrden, Producto, Usuario, Restaurante};
+use App\Models\{ordenes, detalles, productos, restaurantes, usuarios};
 use App\Services\{StripeService, NotificacionService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Log, Auth};
-use Illuminate\Support\Str;
-use App\Models\productos;
-use App\Models\restaurantes;
-use App\Models\usuarios;
-use App\Models\ordenes;
-use App\Models\detalles;
-
 
 class StripeController extends Controller
 {
@@ -45,48 +38,66 @@ class StripeController extends Controller
                 }
             }
 
-            $total = collect($detalles)->sum(fn($d) => $d['precio'] * $d['cantidad']);
+            $agrupado = collect($detalles)->groupBy(function ($item) {
+                // Asegúrate de que el producto exista antes de intentar acceder a su restaurante_id
+                $producto = productos::find($item['producto_id']);
+                return $producto ? $producto->restaurante_id : null;
+            })->filter()->all(); // Filtra cualquier grupo nulo si un producto no se encuentra
 
-            $orden = ordenes::create([
-                'fechacreacion' => now(),
-                'numero' => $this->generarNumeroOrden(),
-                'usuario_id' => $usuario->id,
-                'total' => $total,
-                'estado' => 'PENDIENTE',
-                'restaurante_id' => productos::find($detalles[0]['producto_id'])->restaurante_id,
-                'estadoEntrega' => 'PENDIENTE',
-                
-            ]);
+            $totalGeneral = 0;
+            $ordenesCreadas = [];
 
-            foreach ($detalles as $data) {
-                detalles::create([
-                    'orden_id' => $orden->id,
-                    'producto_id' => $data['producto_id'],
-                    'cantidad' => $data['cantidad'],
-                    'precio' => $data['precio'],
+            foreach ($agrupado as $restauranteId => $items) {
+                $totalOrden = collect($items)->sum(fn($d) => $d['precio'] * $d['cantidad']);
+                $totalGeneral += $totalOrden;
+
+                $orden = ordenes::create([
+                    'fechacreacion' => now(),
+                    'numero' => $this->generarNumeroOrden(),
+                    'usuario_id' => $usuario->id,
+                    'total' => $totalOrden,
+                    'estado' => 'PENDIENTE',
+                    'estadoEntrega' => 'PENDIENTE',
+                    'id_restaurante' => $restauranteId, // ¡CAMBIO AQUÍ! Usar 'id_restaurante'
                 ]);
+
+                foreach ($items as $item) {
+                    detalles::create([
+                        'orden_id' => $orden->id,
+                        'producto_id' => $item['producto_id'],
+                        'cantidad' => $item['cantidad'],
+                        'precio' => $item['precio'],
+                    ]);
+                }
+
+                $ordenesCreadas[] = $orden;
             }
 
             $metadata = [
                 'usuario_id' => $usuario->id,
-                'orden_id' => $orden->id,
-                'total' => number_format($total, 2),
-                'productos' => collect($detalles)->map(fn($d) =>
-                    "{$d['producto_id']}:{$d['cantidad']}:{$d['precio']}")->implode(';')
+                'ordenes_ids' => collect($ordenesCreadas)->pluck('id')->implode(','),
+                'total' => number_format($totalGeneral, 2),
             ];
+
+            if (!empty($ordenesCreadas)) {
+                $metadata['orden_id'] = $ordenesCreadas[0]->id;
+            }
 
             $sessionData = $this->stripeService->createCheckoutSession(
                 'Compra en MiTienda',
                 count($detalles) . ' productos',
-                $total,
+                $totalGeneral,
                 $metadata
             );
 
-            $orden->session_id = $sessionData['session_id'];
-            $orden->save();
+            foreach ($ordenesCreadas as $orden) {
+                $orden->session_id = $sessionData['session_id'];
+                $orden->save();
+            }
 
             DB::commit();
             return response()->json($sessionData);
+
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Error en checkout: ' . $e->getMessage());
@@ -105,50 +116,45 @@ class StripeController extends Controller
 
             if ($event->type === 'checkout.session.completed') {
                 $session = $event->data->object;
-                $metadata = $session->metadata;
+                $metadata = $session->metadata ?? [];
 
-                $usuario = usuarios::findOrFail($metadata->usuario_id);
+                $usuarioId = $metadata->usuario_id ?? null;
+                $ordenesIdsStr = $metadata->ordenes_ids ?? '';
 
-                $detalles = collect(explode(';', $metadata->productos))->map(function ($item) {
-                    [$id, $cantidad, $precio] = explode(':', $item);
-                    return [
-                        'producto' => productos::findOrFail($id),
-                        'cantidad' => $cantidad,
-                        'precio' => $precio
-                    ];
-                });
-
-                $orden = ordenes::create([
-                    'fechacreacion' => now(),
-                    'numero' => $this->generarNumeroOrden(),
-                    'usuario_id' => $usuario->id,
-                    'total' => $session->amount_total / 100,
-                    'estado' => 'PAGADA',
-                    'session_id' => $session->id,
-                    'restaurante_id' => $detalles->first()['producto']->restaurante_id
-                ]);
-
-                foreach ($detalles as $d) {
-                    detalles::create([
-                        'orden_id' => $orden->id,
-                        'producto_id' => $d['producto']->id,
-                        'cantidad' => $d['cantidad'],
-                        'precio' => $d['precio'],
-                    ]);
-                    $d['producto']->decrement('cantidad', $d['cantidad']);
+                if (!$usuarioId || !$ordenesIdsStr) {
+                    return response()->json(['error' => 'Metadata incompleta'], 400);
                 }
 
-                $admin = restaurantes::find($orden->restaurante_id)?->administrador;
-                if ($admin) {
-                    $this->notificacionService->enviarNotificacionOrdenPagada(
-                        $admin->id,
-                        $orden->id,
-                        $orden->numero,
-                        $orden->restaurante_id
-                    );
+                $ordenesIds = explode(',', $ordenesIdsStr);
+
+                foreach ($ordenesIds as $ordenId) {
+                    $orden = ordenes::find($ordenId);
+                    if (!$orden || $orden->estado === 'PAGADA') continue;
+
+                    $orden->estado = 'PAGADA';
+                    $orden->save();
+
+                    $detalles = detalles::where('orden_id', $orden->id)->get();
+
+                    foreach ($detalles as $detalle) {
+                        $producto = productos::find($detalle->producto_id);
+                        if ($producto) {
+                            $producto->decrement('cantidad', $detalle->cantidad);
+                        }
+                    }
+
+                    $admin = restaurantes::find($orden->id_restaurante)?->administrador; // Usar id_restaurante
+                    if ($admin) {
+                        $this->notificacionService->enviarNotificacionOrdenPagada(
+                            $admin->id,
+                            $orden->id,
+                            $orden->numero,
+                            $orden->id_restaurante // Usar id_restaurante
+                        );
+                    }
                 }
 
-                return response()->json(['message' => 'Orden pagada y notificada']);
+                return response()->json(['message' => 'Ordenes pagadas y notificadas']);
             }
 
             return response()->json(['message' => 'Evento no manejado']);
@@ -158,7 +164,8 @@ class StripeController extends Controller
         }
     }
 
-    private function generarNumeroOrden(){
+    private function generarNumeroOrden()
+    {
         $ultimo = ordenes::max('id') ?? 0;
         $siguiente = $ultimo + 1;
         return 'ORD-' . str_pad($siguiente, 13, '0', STR_PAD_LEFT);
@@ -167,109 +174,73 @@ class StripeController extends Controller
     public function pagoExitoso(Request $request)
     {
         $sessionId = $request->query('session_id');
-        Log::info("🔗 Acceso a /stripe/exitoso con session_id: {$sessionId}");
+        Log::info("✅ Acceso a /stripe/exitoso con session_id: {$sessionId}");
 
         try {
             if (!$sessionId) {
-                Log::warning("⚠️ session_id no proporcionado en la URL");
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "No se pudo identificar la sesión de pago"
-                ], 400);
+                return response()->json(['status' => 'error', 'message' => 'Falta session_id'], 400);
             }
 
             $usuario = Auth::user();
             if (!$usuario) {
-                Log::warning("🔒 Usuario no autenticado accediendo a /stripe/exitoso");
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Usuario no autenticado"
-                ], 401);
+                return response()->json(['status' => 'error', 'message' => 'Usuario no autenticado'], 401);
             }
 
-            $orden = ordenes::where('session_id', $sessionId)->first();
-            if (!$orden) {
-                Log::warning("🔍 Orden no encontrada con session_id: {$sessionId}");
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Orden no encontrada"
-                ], 404);
+            $ordenes = ordenes::where('session_id', $sessionId)->where('usuario_id', $usuario->id)->get();
+            if ($ordenes->isEmpty()) {
+                return response()->json(['status' => 'error', 'message' => 'Ordenes no encontradas'], 404);
             }
 
-            if ($orden->usuario_id !== $usuario->id) {
-                Log::warning("🚫 Usuario no autorizado para esta orden. Usuario actual: {$usuario->id} | Dueño: {$orden->usuario_id}");
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Esta orden no pertenece al usuario actual"
-                ], 403);
-            }
+            foreach ($ordenes as $orden) {
+                if ($orden->estado !== 'PAGADA') {
+                    $orden->estado = 'PAGADA';
+                    $orden->save();
 
-            if ($orden->estado !== 'PAGADA') {
-                $orden->estado = 'PAGADA';
-                $orden->save();
-                Log::info("💳 Orden #{$orden->numero} marcada como PAGADA");
-            }
-
-            $detalles = detalles::where('orden_id', $orden->id)->get();
-            foreach ($detalles as $detalle) {
-                $producto = productos::find($detalle->producto_id);
-                $cantidad = intval($detalle->cantidad);
-
-                if ($producto->cantidad < $cantidad) {
-                    Log::warning("📦 Stock insuficiente para producto {$producto->id}");
-                    return response()->json([
-                        'status' => 'error',
-                        'message' => "Stock insuficiente para {$producto->nombre}"
-                    ], 400);
+                    $detalles = detalles::where('orden_id', $orden->id)->get();
+                    foreach ($detalles as $detalle) {
+                        $producto = productos::find($detalle->producto_id);
+                        if ($producto && $producto->cantidad >= $detalle->cantidad) {
+                            $producto->cantidad -= $detalle->cantidad;
+                            $producto->save();
+                        } else {
+                            // Esto ya debería ser manejado en el checkout, pero es una buena validación de respaldo
+                            return response()->json([
+                                'status' => 'error',
+                                'message' => "Stock insuficiente para {$producto->nombre}"
+                            ], 400);
+                        }
+                    }
                 }
-
-                $producto->cantidad -= $cantidad;
-                $producto->save();
             }
-
-            session()->forget('cart');
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Pago procesado correctamente.',
-                'orden' => $orden,
-                'detalles' => $detalles
+                'ordenes' => $ordenes
             ]);
         } catch (\Exception $e) {
             Log::error("❌ Error en pagoExitoso: " . $e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => "Error al procesar el pago: " . $e->getMessage()
-            ], 500);
+            return response()->json(['status' => 'error', 'message' => "Error: " . $e->getMessage()], 500);
         }
     }
 
     public function pagoCancelado(Request $request)
     {
         $sessionId = $request->query('session_id');
-        Log::info("🔗 Acceso a /stripe/cancelado con session_id: {$sessionId}");
 
         try {
-            if (!$sessionId) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "No se pudo identificar la sesión de pago"
-                ], 400);
-            }
+            if (!$sessionId) return response()->json(['status' => 'error', 'message' => 'Falta session_id'], 400);
 
             $usuario = Auth::user();
-            if (!$usuario) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => "Usuario no autenticado"
-                ], 401);
-            }
+            if (!$usuario) return response()->json(['status' => 'error', 'message' => 'Usuario no autenticado'], 401);
 
-            $orden = ordenes::where('session_id', $sessionId)->first();
-            if ($orden && $orden->usuario_id === $usuario->id && $orden->estado !== 'CANCELADA') {
-                $orden->estado = 'CANCELADA';
-                $orden->save();
-                Log::info("🛑 Orden #{$orden->numero} marcada como CANCELADA");
+            $ordenes = ordenes::where('session_id', $sessionId)->where('usuario_id', $usuario->id)->get();
+
+            foreach ($ordenes as $orden) {
+                if ($orden->estado !== 'CANCELADA') {
+                    $orden->estado = 'CANCELADA';
+                    $orden->save();
+                }
             }
 
             return response()->json([
@@ -279,10 +250,7 @@ class StripeController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error("❌ Error en pagoCancelado: " . $e->getMessage());
-            return response()->json([
-                'status' => 'error',
-                'message' => "Error al procesar cancelación: " . $e->getMessage()
-            ], 500);
+            return response()->json(['status' => 'error', 'message' => "Error: " . $e->getMessage()], 500);
         }
     }
 
@@ -295,8 +263,3 @@ class StripeController extends Controller
         ]);
     }
 }
-
-
-
-
-

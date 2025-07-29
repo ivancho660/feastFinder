@@ -4,6 +4,7 @@ use App\Http\Controllers\usuariosController;
 use App\Http\Controllers\restaurantesController;
 use App\Http\Controllers\StripeController;
 use App\Http\Controllers\CarritoController;
+use App\Http\Controllers\productosController;
 use Illuminate\Support\Facades\Route;
 
 // Rutas públicas (sin autenticación)
@@ -25,6 +26,7 @@ Route::middleware('jwt.auth')->group(function () {
     
     // Restaurantes
     Route::get('listarRestaurantes', [restaurantesController::class, 'index']);
+    Route::get('listarProductos', [productosController::class, 'index']);
     
     // Stripe
     Route::post('stripe/checkout', [StripeController::class, 'checkout']);

@@ -39,7 +39,7 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
         $validator = Validator::make($request->all(), [
             'direccion' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:usuarios',
-            'estado' => 'required|string|max:255',
+            'estado' => 'nullable|string|max:255',
             'imagen' => 'nullable|string',
             'nombre' => 'required|string|max:255',
             'password' => 'required|string|min:8',
@@ -351,6 +351,9 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
         ]);
     }
 
+    /**
+     * Traer el menú de un restaurante específico
+     */
     public function traerMenu($nr)
     {
         Log::info("Buscando productos para el restaurante: {$nr}"); 
@@ -360,7 +363,7 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
             return response()->json([
                 'message' => 'El nombre del restaurante no puede estar vacío.',
                 'productos' => []
-            ], 400);
+            ], 400); 
         }
 
         $productosDisponibles = productos::where('nombreR', $nr) 
@@ -372,10 +375,17 @@ class usuariosController extends Controller // <<-- Asegúrate de que el nombre 
             return response()->json([
                 'message' => 'No se encontraron productos disponibles para este restaurante.',
                 'productos' => []
-            ], 404); 
+            ], 200);
         } else {
+            $productosDisponibles->map(function ($producto) {
+                if ($producto->imagen) {
+                    $producto->imagen = url('images/' . $producto->imagen);
+                }
+                return $producto;
+            });
             Log::info("Se encontraron {$productosDisponibles->count()} productos disponibles para el restaurante: {$nr}");
         }
+
         return response()->json([
             'message' => 'Productos obtenidos exitosamente.',
             'productos' => $productosDisponibles

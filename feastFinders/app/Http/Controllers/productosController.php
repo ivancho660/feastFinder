@@ -5,19 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\productos;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\URL; // Agrega este use si no está arriba
 
 class productosController extends Controller
 {
     
-    public function index()
+
+
+public function index()
     {
-        
-        $productos = productos::all();
+        $productos = productos::all()->map(function ($producto) {
+            if ($producto->imagen) {
+                // CAMBIO AQUÍ: Usar la función url() de Laravel
+                $producto->imagen = url('images/' . $producto->imagen); 
+            }
+            return $producto;
+        });
+
         return response()->json($productos);
-    
     }
 
-   
+
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
